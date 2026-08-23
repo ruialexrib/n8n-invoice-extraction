@@ -1,6 +1,6 @@
 # n8n Invoice Extraction
 
-An MVP that processes Portuguese invoices (NOS, EDP, and water utilities), extracts customer and payment data with a locally hosted, quantized Amália model through Ollama, and appends validated results to a local Excel register.
+An MVP that processes Portuguese telecommunications, electricity, and water invoices, extracts customer and payment data with a locally hosted, quantized Amália model through Ollama, and appends validated results to a local Excel register.
 
 ## Intended workflow
 
@@ -66,7 +66,7 @@ Changes take effect on the next run without reimporting the workflow. See [`docs
 ## MVP scope
 
 - Input: PDFs containing searchable text.
-- Providers: NOS, EDP, and municipal water utilities.
+- Provider categories: telecommunications, electricity, and water utilities.
 - Output: one row per invoice in `data/output/invoices.xlsx`.
 - Monetary values: decimal numbers without currency symbols.
 - Dates: ISO 8601 (`YYYY-MM-DD`).

@@ -55,6 +55,6 @@ This separation prevents real customer names, tax IDs, addresses, Multibanco ref
 - Validate normalized results against the JSON Schema with a dedicated validator.
 - Add SHA-256-based deduplication and a controlled retention policy.
 - Add a processed-file ledger or move confirmed source files out of the inbox to avoid repeated model executions on the one-minute schedule.
-- Add anonymized regression fixtures for NOS, EDP, and water invoices.
+- Add anonymized regression fixtures for telecommunications, electricity, and water invoices.
 - Add workbook locking/retry handling for concurrent executions.
 - Move the operational register to PostgreSQL or an ERP when multi-user access or stronger auditability is required.
