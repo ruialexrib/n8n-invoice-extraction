@@ -1,0 +1,38 @@
+name: n8n-invoice-extraction
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/Lisbon}
+      - TZ=${GENERIC_TIMEZONE:-Europe/Lisbon}
+      - N8N_SECURE_COOKIE=false
+      - N8N_RESTRICT_FILE_ACCESS_TO=/files;/config
+      - INVOICE_BASE_PATH=${INVOICE_BASE_PATH:-/files}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      report-service:
+        condition: service_healthy
+    volumes:
+      - ./.n8n:/home/node/.n8n
+      - ./data:/files
+      - ./config:/config/runtime:ro
+      - ./prompts:/config/prompts:ro
+      - ./schemas:/config/schemas:ro
+
+  report-service:
+    build:
+      context: ./report-service
+    restart: unless-stopped
+    volumes:
+      - ./data:/files
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

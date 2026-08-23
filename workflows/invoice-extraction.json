@@ -1,0 +1,493 @@
+{
+  "name": "Invoice Extraction - Communications, Electricity and Water",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-900, 0]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-900, -160]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/config/runtime/extraction.json",
+        "options": {}
+      },
+      "id": "read-extraction-config",
+      "name": "Read extraction config",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [-680, -260]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "data",
+        "options": {
+          "encoding": "utf8",
+          "stripBOM": true
+        }
+      },
+      "id": "extract-config-text",
+      "name": "Extract config text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [-460, -260]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = JSON.parse(items[0].json.data);\nconst required = ['ollama_model', 'input_glob', 'register_path', 'register_file_name', 'worksheet_name', 'report_service_url', 'report_path', 'report_title', 'report_language', 'processed_directory', 'error_directory', 'currency', 'provider_labels'];\nfor (const field of required) {\n  if (config[field] === undefined || config[field] === null || config[field] === '') {\n    throw new Error('Missing required configuration field: ' + field);\n  }\n}\nreturn [{ json: config }];"
+      },
+      "id": "parse-extraction-config",
+      "name": "Parse extraction config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-240, -260]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/config/prompts/invoice-extractor.md",
+        "options": {}
+      },
+      "id": "read-extraction-prompt",
+      "name": "Read extraction prompt",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [-20, -260]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "data",
+        "options": {
+          "encoding": "utf8",
+          "stripBOM": true
+        }
+      },
+      "id": "extract-prompt-text",
+      "name": "Extract extraction prompt",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [200, -260]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/config/schemas/invoice.schema.json",
+        "options": {}
+      },
+      "id": "read-invoice-schema",
+      "name": "Read invoice schema",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [420, -260]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "data",
+        "options": {
+          "encoding": "utf8",
+          "stripBOM": true
+        }
+      },
+      "id": "extract-schema-text",
+      "name": "Extract invoice schema",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [640, -260]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $('Parse extraction config').first().json.input_glob }}",
+        "options": {}
+      },
+      "id": "read-files",
+      "name": "Read invoice PDFs",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [-680, 0]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "extract-pdf",
+      "name": "Extract text from PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [-460, -100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "source-file",
+              "name": "source_file",
+              "value": "={{ $('Read invoice PDFs').item.binary.data.fileName }}",
+              "type": "string"
+            },
+            {
+              "id": "invoice-text",
+              "name": "invoice_text",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-input",
+      "name": "Prepare agent input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-240, -100]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Extrai os dados desta fatura. Nome: {{ $json.source_file }}\n\nTexto:\n{{ $json.invoice_text }}",
+        "options": {
+              "systemMessage": "={{ [$('Extract extraction prompt').first().json.data, 'JSON Schema:', $('Extract invoice schema').first().json.data].join(String.fromCharCode(10, 10)) }}"
+        }
+      },
+      "id": "extraction-agent",
+      "name": "Invoice Extraction Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [-20, -100]
+    },
+    {
+      "parameters": {
+        "model": "={{ $('Parse extraction config').first().json.ollama_model }}",
+        "options": {
+          "format": "json",
+          "temperature": 0.1
+        }
+      },
+      "id": "ollama-amalia-model",
+      "name": "Amalia via Ollama",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [-20, 120]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-result-original",
+      "name": "Merge result with original PDF",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const required = ['provider_type', 'supplier', 'invoice', 'customer', 'amounts', 'confidence', 'warnings'];\nconst first = (...values) => values.find((value) => value !== undefined && value !== null) ?? null;\nconst numberOrNull = (value) => { const number = Number(value); return value !== null && value !== '' && Number.isFinite(number) ? number : null; };\nconst addressText = (value) => value && typeof value === 'object' ? [value.street, value.number, value.floor, value.zip, value.city].filter(Boolean).join(', ') : first(value);\n\nreturn items.map((item, index) => {\n  const raw = item.json.output ?? item.json.text ?? item.json.response ?? '';\n  const sourceFile = item.binary?.data?.fileName ?? `invoice-${index + 1}.pdf`;\n  const safeSourceFile = sourceFile.replace(/[^a-zA-Z0-9._-]/g, '_');\n  const stem = safeSourceFile.replace(/\\.[^.]+$/, '') || `invoice-${index + 1}`;\n  let parsed = null;\n  const errors = [];\n\n  try {\n    const cleaned = typeof raw === 'string' ? raw.trim().replace(/^\\`\\`\\`(?:json)?\\s*/i, '').replace(/\\s*\\`\\`\\`$/, '') : raw;\n    parsed = typeof cleaned === 'string' ? JSON.parse(cleaned) : cleaned;\n  } catch (error) {\n    errors.push(`Invalid JSON returned by the model: ${error.message}`);\n  }\n\n  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {\n    errors.push('The model output is not a JSON object.');\n  } else {\n    const source = parsed;\n    const providerAliases = { electricity: 'edp', energy: 'edp', telecom: 'nos', telecommunications: 'nos', water: 'agua', água: 'agua' };\n    let providerType = providerAliases[String(source.provider_type ?? '').toLowerCase()] ?? String(source.provider_type ?? '').toLowerCase();\n    const supplierName = String(source.supplier?.name ?? '').toLowerCase();\n    if (!['nos', 'edp', 'agua', 'unknown'].includes(providerType)) {\n      providerType = supplierName.includes('edp') ? 'edp' : supplierName.includes('nos') ? 'nos' : 'unknown';\n    }\n\n    const period = source.invoice?.period ?? source.consumption?.electricity?.period ?? source.consumption?.water?.period ?? {};\n    const amountSource = source.amounts ?? {};\n    const electricityAmounts = amountSource.electricity ?? {};\n    const warningSource = source.warnings ?? source.consumption?.warnings ?? [];\n    const warnings = (Array.isArray(warningSource) ? warningSource : [warningSource]).map((warning) => typeof warning === 'string' ? warning : first(warning?.message, warning?.code, JSON.stringify(warning))).filter(Boolean);\n    const confidenceSource = source.confidence;\n    let confidence = numberOrNull(confidenceSource);\n    if (confidence === null && confidenceSource && typeof confidenceSource === 'object') {\n      confidence = numberOrNull(first(confidenceSource.extraction, confidenceSource.overall));\n      if (confidence === null) {\n        const scores = Object.values(confidenceSource).map(numberOrNull).filter((value) => value !== null);\n        confidence = scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;\n      }\n    }\n\n    const consumptionSource = source.consumption?.electricity ?? source.consumption?.water ?? source.consumption ?? {};\n    const realReadings = consumptionSource.readings?.real ?? {};\n    const total = numberOrNull(first(amountSource.total, source.invoice?.total_amount, source.payment?.total_amount, amountSource.total_before_taxes?.total));\n    const tax = numberOrNull(first(amountSource.tax, amountSource.total_taxes_and_fees, electricityAmounts.taxes_fees?.total));\n    const subtotal = numberOrNull(first(amountSource.subtotal, electricityAmounts.subtotal, total !== null && tax !== null ? total - tax : null));\n\n    parsed = {\n      provider_type: providerType || 'unknown',\n      supplier: {\n        name: first(source.supplier?.name),\n        tax_id: first(source.supplier?.tax_id, source.supplier?.nif, source.supplier?.crc)\n      },\n      invoice: {\n        number: first(source.invoice?.number),\n        issue_date: first(source.invoice?.issue_date),\n        due_date: first(source.invoice?.due_date, source.payment?.due_date),\n        billing_period_start: first(source.invoice?.billing_period_start, period.start),\n        billing_period_end: first(source.invoice?.billing_period_end, period.end)\n      },\n      customer: {\n        name: first(source.customer?.name),\n        tax_id: first(source.customer?.tax_id, source.customer?.nif),\n        account_number: first(source.customer?.account_number, source.customer?.contract_code, source.customer?.customer_number),\n        address: addressText(source.customer?.address)\n      },\n      amounts: { subtotal, tax, total, currency: first(amountSource.currency, source.invoice?.currency, 'EUR') },\n      payment: {\n        method: first(source.payment?.method),\n        entity: first(source.payment?.entity, source.invoice?.reference?.entity),\n        reference: first(source.payment?.reference, source.invoice?.reference?.identifier),\n        iban: first(source.payment?.iban)\n      },\n      consumption: {\n        value: numberOrNull(first(consumptionSource.value, realReadings.total, consumptionSource.total)),\n        unit: first(consumptionSource.unit, providerType === 'edp' ? 'kWh' : providerType === 'agua' ? 'm3' : null),\n        meter_or_cpe: first(consumptionSource.meter_or_cpe, source.customer?.cpe, source.customer?.meter, source.raw_fields?.cpe)\n      },\n      raw_fields: source.raw_fields && typeof source.raw_fields === 'object' ? source.raw_fields : {},\n      confidence: confidence ?? 0,\n      warnings\n    };\n\n    for (const field of required) if (!(field in parsed)) errors.push(`Missing required field: ${field}`);\n    if (!['nos', 'edp', 'agua', 'unknown'].includes(parsed.provider_type)) errors.push('Invalid provider_type.');\n    if (typeof parsed.confidence !== 'number' || parsed.confidence < 0 || parsed.confidence > 1) errors.push('confidence must be between 0 and 1.');\n    if (!Array.isArray(parsed.warnings)) errors.push('warnings must be an array.');\n    if (parsed.amounts?.currency !== 'EUR') errors.push('amounts.currency must be EUR.');\n    if (parsed.amounts?.total === null) errors.push('The total invoice amount could not be determined.');\n  }\n\n  const isValid = errors.length === 0;\n  const payload = isValid ? parsed : { source_file: sourceFile, status: 'error', errors, normalized_output: parsed, raw_model_output: raw };\n  const resultName = isValid ? `${stem}.json` : `${stem}.error.json`;\n  const resultData = Buffer.from(JSON.stringify(payload, null, 2), 'utf8').toString('base64');\n\n  return {\n    json: { is_valid: isValid, source_file: sourceFile, safe_source_file: safeSourceFile, result_file: resultName, validation_errors: errors, invoice: isValid ? parsed : null },\n    binary: { ...(item.binary ?? {}), result: { data: resultData, mimeType: 'application/json', fileName: resultName, fileExtension: 'json' } },\n    pairedItem: { item: index }\n  };\n});"
+      },
+      "id": "parse-validate",
+      "name": "Parse and validate result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-valid-condition",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "valid-result",
+      "name": "Valid extraction?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $('Parse extraction config').first().json.register_path }}",
+        "options": {}
+      },
+      "id": "read-invoice-register",
+      "name": "Read invoice register",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [900, -140],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Parse extraction config').first().json.processed_directory + '/' + $binary.data.fileName.replace(/[^a-zA-Z0-9._-]/g, '_') }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "archive-processed",
+      "name": "Copy PDF to processed",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [1140, -140]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Parse extraction config').first().json.error_directory + '/' + $json.result_file }}",
+        "dataPropertyName": "result",
+        "options": {}
+      },
+      "id": "write-error-report",
+      "name": "Write error report",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [900, 140]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Parse extraction config').first().json.error_directory + '/' + $json.safe_source_file }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "archive-error",
+      "name": "Copy PDF to error",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [1140, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map((item, index) => {\n  const invoice = item.json.invoice;\n  return {\n    json: {\n      'Processed At': new Date().toISOString(),\n      'Source File': item.json.source_file,\n      'Provider': invoice.provider_type,\n      'Supplier': invoice.supplier?.name ?? null,\n      'Invoice Number': invoice.invoice?.number ?? null,\n      'Issue Date': invoice.invoice?.issue_date ?? null,\n      'Payment Due Date': invoice.invoice?.due_date ?? null,\n      'Customer Name': invoice.customer?.name ?? null,\n      'Customer Tax ID': invoice.customer?.tax_id ?? null,\n      'Customer Account': invoice.customer?.account_number ?? null,\n      'Customer Address': invoice.customer?.address ?? null,\n      'Payment Method': invoice.payment?.method ?? null,\n      'Multibanco Entity': invoice.payment?.entity ?? null,\n      'Multibanco Reference': invoice.payment?.reference ?? null,\n      'IBAN': invoice.payment?.iban ?? null,\n      'Amount': invoice.amounts?.total ?? null,\n      'Currency': invoice.amounts?.currency ?? 'EUR',\n      'Confidence': invoice.confidence ?? null,\n      'Warnings': Array.isArray(invoice.warnings) ? invoice.warnings.join(' | ') : ''\n    },\n    binary: item.binary,\n    pairedItem: { item: index }\n  };\n});"
+      },
+      "id": "prepare-excel-row",
+      "name": "Prepare Excel row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -200]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "headerRow": true,
+          "rawData": false,
+          "readAsString": false
+        }
+      },
+      "id": "extract-invoice-register",
+      "name": "Extract current register",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [1120, -320],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "append-register-row",
+      "name": "Append row to register",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [1360, -220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const seen = new Set();\nconst rows = [];\nconst config = $('Parse extraction config').first().json;\nconst providerLabels = config.provider_labels ?? {};\nfor (const item of items) {\n  if (!item.json || !item.json['Source File']) continue;\n  const provider = String(item.json.Provider ?? '').toLowerCase();\n  item.json.Provider = providerLabels[provider] ?? provider;\n  item.json.Currency = item.json.Currency ?? config.currency;\n  const key = `${item.json['Source File']}|${item.json['Invoice Number'] ?? ''}`;\n  if (seen.has(key)) continue;\n  seen.add(key);\n  rows.push({ json: item.json });\n}\nreturn rows;"
+      },
+      "id": "deduplicate-register",
+      "name": "Deduplicate register",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, -220]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "data",
+        "options": {
+          "fileName": "={{ $('Parse extraction config').first().json.register_file_name }}",
+          "headerRow": true,
+          "sheetName": "={{ $('Parse extraction config').first().json.worksheet_name }}"
+        }
+      },
+      "id": "convert-register-xlsx",
+      "name": "Build updated Excel register",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [1800, -220]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Parse extraction config').first().json.register_path }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "write-invoice-register",
+      "name": "Write invoice register",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [2020, -220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse extraction config').first().json.report_service_url }}",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ rows: $('Deduplicate register').all().map(item => item.json), report_path: $('Parse extraction config').first().json.report_path, title: $('Parse extraction config').first().json.report_title, language: $('Parse extraction config').first().json.report_language }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "generate-word-report",
+      "name": "Generate Word expense report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2240, -220]
+    }
+  ],
+  "connections": {
+    "Run manually": {
+      "main": [[{ "node": "Read extraction config", "type": "main", "index": 0 }]]
+    },
+    "Every minute": {
+      "main": [[{ "node": "Read extraction config", "type": "main", "index": 0 }]]
+    },
+    "Read extraction config": {
+      "main": [[{ "node": "Extract config text", "type": "main", "index": 0 }]]
+    },
+    "Extract config text": {
+      "main": [[{ "node": "Parse extraction config", "type": "main", "index": 0 }]]
+    },
+    "Parse extraction config": {
+      "main": [[{ "node": "Read extraction prompt", "type": "main", "index": 0 }]]
+    },
+    "Read extraction prompt": {
+      "main": [[{ "node": "Extract extraction prompt", "type": "main", "index": 0 }]]
+    },
+    "Extract extraction prompt": {
+      "main": [[{ "node": "Read invoice schema", "type": "main", "index": 0 }]]
+    },
+    "Read invoice schema": {
+      "main": [[{ "node": "Extract invoice schema", "type": "main", "index": 0 }]]
+    },
+    "Extract invoice schema": {
+      "main": [[{ "node": "Read invoice PDFs", "type": "main", "index": 0 }]]
+    },
+    "Read invoice PDFs": {
+      "main": [
+        [
+          { "node": "Extract text from PDF", "type": "main", "index": 0 },
+          { "node": "Merge result with original PDF", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "Extract text from PDF": {
+      "main": [[{ "node": "Prepare agent input", "type": "main", "index": 0 }]]
+    },
+    "Prepare agent input": {
+      "main": [[{ "node": "Invoice Extraction Agent", "type": "main", "index": 0 }]]
+    },
+    "Invoice Extraction Agent": {
+      "main": [[{ "node": "Merge result with original PDF", "type": "main", "index": 0 }]]
+    },
+    "Amalia via Ollama": {
+      "ai_languageModel": [[{ "node": "Invoice Extraction Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Merge result with original PDF": {
+      "main": [[{ "node": "Parse and validate result", "type": "main", "index": 0 }]]
+    },
+    "Parse and validate result": {
+      "main": [[{ "node": "Valid extraction?", "type": "main", "index": 0 }]]
+    },
+    "Valid extraction?": {
+      "main": [
+        [{ "node": "Prepare Excel row", "type": "main", "index": 0 }],
+        [{ "node": "Write error report", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Excel row": {
+      "main": [
+        [
+          { "node": "Read invoice register", "type": "main", "index": 0 },
+          { "node": "Append row to register", "type": "main", "index": 1 },
+          { "node": "Copy PDF to processed", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Read invoice register": {
+      "main": [[{ "node": "Extract current register", "type": "main", "index": 0 }]]
+    },
+    "Extract current register": {
+      "main": [[{ "node": "Append row to register", "type": "main", "index": 0 }]]
+    },
+    "Append row to register": {
+      "main": [[{ "node": "Deduplicate register", "type": "main", "index": 0 }]]
+    },
+    "Deduplicate register": {
+      "main": [[{ "node": "Build updated Excel register", "type": "main", "index": 0 }]]
+    },
+    "Build updated Excel register": {
+      "main": [[{ "node": "Write invoice register", "type": "main", "index": 0 }]]
+    },
+    "Write invoice register": {
+      "main": [[{ "node": "Generate Word expense report", "type": "main", "index": 0 }]]
+    },
+    "Write error report": {
+      "main": [[{ "node": "Copy PDF to error", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "a532fb5f-993e-4bc3-b937-cd8fafc68121",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

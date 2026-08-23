@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/invoice.schema.json",
+  "title": "Portuguese Utility Invoice",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider_type", "supplier", "invoice", "customer", "payment", "amounts", "confidence", "warnings"],
+  "properties": {
+    "provider_type": { "enum": ["comunicacoes", "eletricidade", "agua", "unknown"] },
+    "supplier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tax_id"],
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "tax_id": { "type": ["string", "null"] }
+      }
+    },
+    "invoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "issue_date", "due_date"],
+      "properties": {
+        "number": { "type": ["string", "null"] },
+        "issue_date": { "type": ["string", "null"], "format": "date" },
+        "due_date": { "type": ["string", "null"], "format": "date" }
+      }
+    },
+    "customer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tax_id", "account_number", "address"],
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "tax_id": { "type": ["string", "null"] },
+        "account_number": { "type": ["string", "null"] },
+        "address": { "type": ["string", "null"] }
+      }
+    },
+    "amounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "currency"],
+      "properties": {
+        "total": { "type": ["number", "null"] },
+        "currency": { "const": "EUR" }
+      }
+    },
+    "payment": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "type": ["string", "null"] },
+        "entity": { "type": ["string", "null"] },
+        "reference": { "type": ["string", "null"] },
+        "iban": { "type": ["string", "null"] }
+      }
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}

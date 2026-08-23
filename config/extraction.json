@@ -1,0 +1,22 @@
+{
+  "ollama_model": "hf.co/ruialexrib/AMALIA-9B-0626-SFT-GGUF:Q3_K_M",
+  "input_glob": "/files/inbox/*.pdf",
+  "register_path": "/files/output/invoices.xlsx",
+  "register_file_name": "invoices.xlsx",
+  "worksheet_name": "Invoices",
+  "report_service_url": "http://report-service:8080/report",
+  "report_path": "/files/output/relatorio-despesas.docx",
+  "report_title": "Relatório de Despesas Processadas",
+  "report_language": "pt-PT",
+  "processed_directory": "/files/processed",
+  "error_directory": "/files/error",
+  "currency": "EUR",
+  "provider_labels": {
+    "edp": "eletricidade",
+    "electricity": "eletricidade",
+    "energy": "eletricidade",
+    "nos": "comunicacoes",
+    "telecom": "comunicacoes",
+    "telecommunications": "comunicacoes"
+  }
+}
