@@ -1,58 +1,89 @@
+<div align="center">
+
 # n8n Invoice Extraction
 
-An MVP that processes Portuguese telecommunications, electricity, and water invoices, extracts customer and payment data with a locally hosted, quantized Amália model through Ollama, and appends validated results to a local Excel register.
+### Local AI-assisted extraction of Portuguese utility invoices
 
-## Intended workflow
+[![n8n](https://img.shields.io/badge/n8n-Workflow%20Automation-EA4B71?logo=n8n&logoColor=white)](https://n8n.io/)
+[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-black)](https://ollama.com/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Excel](https://img.shields.io/badge/Output-Excel-217346?logo=microsoftexcel&logoColor=white)](#outputs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Every minute: `data/inbox` → text extraction → Amália → validation. Invalid extractions write an error report and copy the PDF to `error`. Valid extractions copy the PDF to `processed` while the workflow updates Excel and then generates the Word expense report.
+**Invoice processing · Local LLM · Structured extraction · Excel register · Word reporting**
 
-The initial workflow is available at [`workflows/invoice-extraction.json`](workflows/invoice-extraction.json). The **Invoice Extraction Agent** is connected to the n8n **Ollama Chat Model** node and defaults to the locally installed `hf.co/ruialexrib/AMALIA-9B-0626-SFT-GGUF:Q3_K_M` model.
+</div>
 
-## Quick start
+---
 
-1. Start Ollama and verify that the model is available with `ollama list`.
-2. If needed, install it with `ollama pull hf.co/ruialexrib/AMALIA-9B-0626-SFT-GGUF:Q3_K_M`.
-3. Copy `.env.example` to `.env` and change `N8N_ENCRYPTION_KEY`.
-4. Run `docker compose up -d --build`. This starts n8n and the internal Word report service.
-5. Open `http://localhost:5678` and complete the initial setup.
-6. Import `workflows/invoice-extraction.json`.
-7. Open the **Amalia via Ollama** node and create an Ollama credential with base URL `http://host.docker.internal:11434`. No API key is required for the default local Ollama setup.
-8. Run the workflow manually once to validate the credentials and paths.
-9. Publish/activate the workflow. The **Every minute** trigger will then check `data/inbox` automatically; the browser does not need to remain open.
-10. Place a PDF invoice in `data/inbox`.
-11. Open `data/output/invoices.xlsx` and `data/output/relatorio-despesas.docx`. Both are created automatically on the first valid extraction and updated thereafter. A PDF whose extraction passes validation is copied to `data/processed`; invalid output and its PDF copy are written to `data/error`.
+## About
 
-> The container maps `./data` to `/files`. Always use `/files/...` paths inside n8n nodes.
+**n8n Invoice Extraction** is an MVP for processing Portuguese telecommunications, electricity, and water invoices. It extracts customer and payment information using a locally hosted quantised **AMALIA** model through Ollama, validates the structured result, and maintains a local Excel register.
 
-> `localhost` inside the n8n container refers to the container itself. The supplied Compose configuration maps `host.docker.internal` so n8n can reach Ollama running on the host machine.
+Valid extractions are also used to generate a consolidated Word expense report. The workflow is designed to keep invoice processing and model inference on local infrastructure.
 
-## Local model configuration
+---
 
-The workflow reads the model identifier from `config/extraction.json`. The Ollama base URL remains managed in the n8n credential store and should be `http://host.docker.internal:11434` for the supplied Docker setup.
+## Workflow
 
-## File-based configuration
+```text
+data/inbox
+    │
+    ▼
+PDF Text Extraction
+    │
+    ▼
+AMALIA via Ollama
+    │
+    ▼
+Structured Validation
+   / \
+  /   \
+ ▼     ▼
+Valid  Invalid
+ │       │
+ ▼       ▼
+Excel   Error report
+ │      + PDF copy
+ ▼
+Word Expense Report
+ │
+ ▼
+data/processed
+```
 
-The workflow reads these files at the beginning of every execution:
+The scheduled trigger checks `data/inbox` every minute.
 
-- `config/extraction.json` — model, input glob, output paths, workbook settings, currency, and provider mappings.
-- `prompts/invoice-extractor.md` — agent instructions.
-- `schemas/invoice.schema.json` — expected extraction contract supplied to the agent.
+---
 
-Changes take effect on the next run without reimporting the workflow. See [`docs/configuration.md`](docs/configuration.md) for supported fields and limitations.
+## Technology Stack
 
-## Repository structure
+| Technology | Purpose |
+| --- | --- |
+| **n8n** | Workflow orchestration and scheduling |
+| **AMALIA-9B** | Invoice information extraction |
+| **Ollama** | Local LLM execution |
+| **Docker Compose** | Local runtime |
+| **Excel** | Cumulative structured invoice register |
+| **Word** | Consolidated expense report |
+| **JSON Schema** | Extraction contract and validation |
+
+---
+
+## Repository Structure
 
 ```text
 .
 ├── config/
 │   └── extraction.json
 ├── data/
-│   ├── inbox/       # invoices awaiting processing (not versioned)
-│   ├── processed/   # successfully processed invoices
-│   ├── error/       # files requiring review
-│   └── output/      # cumulative Excel invoice register
+│   ├── inbox/       # Invoices awaiting processing
+│   ├── processed/   # Successfully processed invoices
+│   ├── error/       # Files requiring review
+│   └── output/      # Generated Excel and Word files
 ├── docs/
-│   └── architecture.md
+│   ├── architecture.md
+│   └── configuration.md
 ├── prompts/
 │   └── invoice-extractor.md
 ├── schemas/
@@ -63,57 +94,95 @@ Changes take effect on the next run without reimporting the workflow. See [`docs
 └── docker-compose.yml
 ```
 
-## MVP scope
+---
 
-- Input: PDFs containing searchable text.
-- Provider categories: telecommunications, electricity, and water utilities.
-- Output: one row per invoice in `data/output/invoices.xlsx`.
-- Monetary values: decimal numbers without currency symbols.
-- Dates: ISO 8601 (`YYYY-MM-DD`).
-- Uncertain fields: use `null` and add an entry to `warnings`; never fabricate values.
+## Quick Start
 
-## Extracted columns
+1. Start Ollama and verify the model with `ollama list`.
+2. If required, install it:
 
-The register intentionally contains only the principal operational fields:
+```bash
+ollama pull hf.co/ruialexrib/AMALIA-9B-0626-SFT-GGUF:Q3_K_M
+```
 
-- Processing timestamp and source filename
-- Provider, supplier, invoice number, and issue date
-- Customer name, tax ID, account/contract number, and address
-- Payment due date, method, Multibanco entity and reference, and IBAN
-- Total amount, currency, extraction confidence, and warnings
+3. Copy `.env.example` to `.env` and change `N8N_ENCRYPTION_KEY`.
+4. Start the stack:
 
-For an extraction that passes validation, the workflow starts three branches: it reads the existing register, supplies the new row for the register merge, and copies the PDF to `data/processed`. The copy can therefore finish before the Excel and Word outputs. A later Excel or report-generation failure does not move that PDF to `data/error`.
+```bash
+docker compose up -d --build
+```
 
-It also creates or rebuilds `data/output/relatorio-despesas.docx` in Portuguese (Portugal). The report contains a consolidated summary, totals by category, processed expenses, payment details, and extraction warnings.
+5. Open n8n at `http://localhost:5678` and import `workflows/invoice-extraction.json`.
+6. Configure the Ollama credential with `http://host.docker.internal:11434`.
+7. Run the workflow manually once, then publish/activate it.
+8. Place a searchable PDF invoice in `data/inbox`.
 
-If the model returns invalid JSON or fails the core validation rules, it writes:
+> The container maps `./data` to `/files`. Use `/files/...` paths inside n8n nodes.
+
+---
+
+## Configuration
+
+The workflow reads configuration files at the beginning of every execution:
+
+| File | Purpose |
+| --- | --- |
+| `config/extraction.json` | Model, paths, workbook settings, currency, and provider mappings |
+| `prompts/invoice-extractor.md` | LLM extraction instructions |
+| `schemas/invoice.schema.json` | Expected structured extraction contract |
+
+Changes take effect on the next execution without reimporting the workflow.
+
+---
+
+## Extracted Information
+
+The Excel register contains the main operational fields, including processing timestamp, source filename, provider, supplier, invoice number, issue date, customer information, tax ID, account or contract number, address, payment due date, payment method, Multibanco entity and reference, IBAN, total amount, currency, confidence, and warnings.
+
+Uncertain values must be returned as `null` and described in `warnings`; the workflow is designed not to fabricate missing information.
+
+---
+
+## Outputs
+
+For valid extractions, the workflow creates or updates:
+
+```text
+data/output/invoices.xlsx
+data/output/relatorio-despesas.docx
+```
+
+The Word report is generated in Portuguese (Portugal) and contains a consolidated summary, totals by category, processed expenses, payment information, and extraction warnings.
+
+Invalid model output produces:
 
 ```text
 data/error/<invoice-name>.error.json
 data/error/<invoice-name>.pdf
 ```
 
-The source PDF is intentionally retained in `data/inbox`. This avoids destructive file operations while the workflow is being tested. The register uses source filename plus invoice number as its deduplication key, so re-running the same invoice does not add a duplicate row.
+The source PDF remains in `data/inbox`. Excel deduplication uses source filename plus invoice number, but confirmed source files should still be removed from the inbox to avoid unnecessary repeated model executions.
 
-The scheduled trigger runs every minute. Because source PDFs remain in `data/inbox`, they are read again on later executions even though the Excel deduplication prevents duplicate rows. Remove confirmed source PDFs from `data/inbox` to avoid unnecessary model executions.
+---
 
-Do not keep the Excel or Word output open while the workflow runs because the files are overwritten after processing. The workflow creates missing output files automatically. All `.xlsx` and `.docx` files are ignored by Git because they contain personal and payment data.
+## Current Scope & Limitations
 
-Scanned PDFs require OCR. The architecture reserves a step for it, but the exact implementation depends on the selected service, such as Azure Document Intelligence, Google Document AI, or local OCR.
+- Input PDFs must contain searchable text.
+- Current provider categories are telecommunications, electricity, and water.
+- Scanned PDFs require an OCR stage that is not implemented by default.
+- Output files should not remain open while the workflow overwrites them.
+- The workflow is an MVP and should be reviewed before production use.
+
+---
 
 ## Security
 
-- Do not commit invoices, generated results, secrets, or the `.n8n` directory.
-- Excel workbooks, Word reports, runtime PDFs, error reports, and inspection files are ignored by Git.
-- Treat tax IDs, addresses, Multibanco references, IBANs, and invoice data as personal or confidential data.
-- Define retention and access-control policies before processing real data.
-- Pin the n8n image to a specific version before deploying to production.
-- Keep Ollama bound to the local machine or a trusted network; do not expose port `11434` publicly without authentication and transport security.
+Invoices can contain personal and confidential information such as tax IDs, addresses, IBANs, and payment references. Do not commit invoices, generated results, secrets, `.env`, or the `.n8n` directory.
 
-## Troubleshooting
+Before processing real data, define appropriate retention, access-control, encryption, backup, and deployment policies. Keep Ollama on the local machine or a trusted network and do not expose port `11434` publicly without authentication and transport security.
 
-See [`docs/troubleshooting.md`](docs/troubleshooting.md) for the known filesystem, environment-variable, Ollama, Excel-locking, and PDF-text errors.
+---
 
 ## License
 
-This project is licensed under the MIT License. See [`LICENSE`](LICENSE) for details.
+This project is licensed under the [MIT License](LICENSE).
